@@ -1,7 +1,7 @@
 const readline = require('readline'),
 Quiz = require('./quiz.js'),
 chalk = require('chalk'),
-Store = require('./store.js')('json');
+Store = require('./store.js')('sql');
 
 const rl = readline.createInterface({
 	input: process.stdin,
