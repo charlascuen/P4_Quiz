@@ -1,26 +1,29 @@
 const readline = require('readline'),
 Quiz = require('./quiz.js'),
 chalk = require('chalk'),
-fs = require('fs');
+Store = require('./store.js')('json');
 
 const rl = readline.createInterface({
 	input: process.stdin,
 	output: process.stdout
 });
 rl.on('close', () => {
-  console.log('Adiós!');
-  process.exit(0);
+	console.log('Adiós!');
+	process.exit(0);
 });
 
 let commands;
 
 const prompText = chalk.magenta("quiz > ");
 let quiz;
-fs.readFile('quizzes.json', 'utf8', (err, contents) => {
-	quiz = new Quiz(JSON.parse(contents), rl);
+let store = new Store();
+store.init().then(() => {
+	quiz = new Quiz(store, rl);
 	commands = quiz.commands;
 	rl.question(prompText, processInput);
-});
+}).catch((error) => {
+	console.log(error);
+})
 
 function processInput(command) {
 	let splitCommand = command.split(" ");

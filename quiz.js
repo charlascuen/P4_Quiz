@@ -4,8 +4,8 @@ log = require('./log.js');
 
 module.exports = class Quiz {
 	
-	constructor(quizzes, rl) {
-		this.quizzes = quizzes;
+	constructor(store, rl) {
+		this.store = store;
 		this.rl = rl;
 		this.commands = [
 			{
@@ -69,42 +69,39 @@ module.exports = class Quiz {
 	list() {
 		return new Promise((resolve, reject) => {
 			
-			if (this.quizzes.length > 0) {
-				let text = "";
-				for (let id in this.quizzes) {
-					text += log.quizQuestion(id, this.quizzes[id].question);
+			this.store.getAll().then((quizzes) => {
+				if (quizzes.length > 0) {
+					let text = "";
+					for (let id in quizzes) {
+						text += log.quizQuestion(id, quizzes[id].question);
+					}
+					console.log(text);
+				} else {
+					console.log(log.error("No hay preguntas almacenadas"));
 				}
-				console.log(text);
-			} else {
-				console.log(log.error("No hay preguntas almacenadas"));
-			}
-			
-			resolve();
+				
+				resolve();
+			})
 		});
 	}
 	
 	show(id) {
 		return new Promise((resolve, reject) => {
-			id = Number(id);
-			if (Number.isInteger(id) && this.quizzes[id]) {
-				console.log(log.quizItem(id, this.quizzes[id].question, this.quizzes[id].answer));
-			} else {
+			this.store.get(id).then((quiz) => {
+				console.log(log.quizItem(id, quiz.question, quiz.answer));
+				resolve();
+			}).catch(() => {
 				console.log(log.error("El valor del parámetro id no es válido"));
-			}
-			
-			resolve();
+				resolve();
+			});
 		});
 	}
 	
 	add() {
 		return new Promise((resolve, reject) => {
-			let quiz = {};
 			this.rl.question(chalk.red("Introduzca una pregunta: "), (question) => {
-				quiz.question = question;
 				this.rl.question(chalk.red("Introduzca la respuesta: "), (answer) => {
-					quiz.answer = answer;
-					this.quizzes.push(quiz);
-					fs.writeFile('quizzes.json', JSON.stringify(this.quizzes), (err) => {
+					let quiz = this.store.add(question, answer).then((quiz) => {
 						resolve();
 					});
 				});
@@ -114,91 +111,75 @@ module.exports = class Quiz {
 	
 	delete(id) {
 		return new Promise((resolve, reject) => {
-			
-			id = Number(id);
-			if (Number.isInteger(id) && this.quizzes[id]) {
-				this.quizzes.splice(id, 1);
-				fs.writeFile('quizzes.json', JSON.stringify(this.quizzes), (err) => {
-					resolve();
-				});
-			} else {
+			this.store.delete(id).then((quiz) => {
+				resolve();
+			}).catch(() => {
 				console.log(log.error("El valor del parámetro id no es válido"));
-			}
-			
-			resolve();
+				resolve();
+			});
 		});
 	}
 	
 	edit(id) {
 		return new Promise((resolve, reject) => {
-			let quiz = {};
-			id = Number(id);
-			if (Number.isInteger(id) && this.quizzes[id]) {
-				this.rl.question(chalk.red("Introduzca una pregunta: "), (question) => {
-					quiz.question = question;
-					this.rl.question(chalk.red("Introduzca la respuesta: "), (answer) => {
-						quiz.answer = answer;
-						this.quizzes[id] = quiz;
-						fs.writeFile('quizzes.json', JSON.stringify(this.quizzes), (err) => {
-							resolve();
-						});
+			this.rl.question(chalk.red("Introduzca una pregunta: "), (question) => {
+				this.rl.question(chalk.red("Introduzca la respuesta: "), (answer) => {
+					this.store.update(id, question, answer).then((quiz) => {
+						resolve();
+					}).catch(() => {
+						console.log(log.error("El valor del parámetro id no es válido"));
+						resolve();
 					});
 				});
-			} else {
-				console.log(log.error("El valor del parámetro id no es válido"));
-			}
+			});
 		});
 	}
 	
 	test(id) {
 		return new Promise((resolve, reject) => {
-			id = Number(id);
-			if (Number.isInteger(id) && this.quizzes[id]) {
-				this.questionTest(id).then((answer) => {
-					if (answer) {
-						console.log("Su respuesta es correcta");
-						console.log(log.correct());
-					} else {
-						console.log("Su respuesta es incorrecta");
-						console.log(log.incorrect());
-					}
-					return resolve();
-				});
-				
-			} else {
-				console.log(log.error("El valor del parámetro id no es válido"));
-			}
+			this.questionTest(id).then((answer) => {
+				if (answer) {
+					console.log("Su respuesta es correcta");
+					console.log(log.correct());
+				} else {
+					console.log("Su respuesta es incorrecta");
+					console.log(log.incorrect());
+				}
+				return resolve();
+			});
 		});
 	}
 	
 	play() {
 		return new Promise((resolve, reject) => {
-			let quizzes = Array.apply(null, {length: this.quizzes.length}).map(Number.call, Number);
-			let score = 0;
-			let ask = () => {
-				if(quizzes.length > 0){
-					let id = Math.floor(Math.random()*quizzes.length);
-					this.questionTest(quizzes[id]).then((result) => {
-						if (result) {
-							score++;
-							console.log(`CORRECTO - Lleva ${score} aciertos.`);
-						} else {
-							console.log(`INCORRECTO.`);
-							console.log(`Fin del juego. Aciertos: ${score}`);
-							console.log(log.score(score));
-							return resolve();
-						}
-						quizzes.splice(id, 1);
-						ask();
-					});
-				} else {
-					console.log("No hay nada más que preguntar.");
-					console.log(`Fin del juego. Aciertos: ${score}`);
-					console.log(log.score(score));
-					resolve();
-				}
-			};
-			ask();
+			this.store.getAll().then((_quizzes) => {
+				let quizzes = Array.apply(null, {length: _quizzes.length}).map(Number.call, Number);
+				let score = 0;
+				let ask = () => {
+					if(quizzes.length > 0){
+						let id = Math.floor(Math.random()*quizzes.length);
+						this.questionTest(quizzes[id]).then((result) => {
+							if (result) {
+								score++;
+								console.log(`CORRECTO - Lleva ${score} aciertos.`);
+							} else {
+								console.log(`INCORRECTO.`);
+								console.log(`Fin del juego. Aciertos: ${score}`);
+								console.log(log.score(score));
+								return resolve();
+							}
+							quizzes.splice(id, 1);
+							ask();
+						});
+					} else {
+						console.log("No hay nada más que preguntar.");
+						console.log(`Fin del juego. Aciertos: ${score}`);
+						console.log(log.score(score));
+						resolve();
+					}
+				};
+				ask();
+			});
 		});
 	}
 	
@@ -221,20 +202,25 @@ module.exports = class Quiz {
 	
 	questionTest(id) {
 		return new Promise((resolve, reject) => {
-			this.rl.question(chalk.red(this.quizzes[id].question + "? "), (answer) => {
-				answer = answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
-				let realAnswer = this.quizzes[id].answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
-				
-				resolve(answer == realAnswer);
+			this.store.get(id).then((quiz) => {
+				this.rl.question(chalk.red(quiz.question + "? "), (answer) => {
+					answer = answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+					let realAnswer = quiz.answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+					resolve(answer == realAnswer);
+				});
+			}).catch(() => {
+				console.log(log.error("El valor del parámetro id no es válido"));
+				resolve();
 			});
+			
 		});
 	}
 }
 
 function shuffle(a) {
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
+	for (let i = a.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[a[i], a[j]] = [a[j], a[i]];
+	}
+	return a;
 }
