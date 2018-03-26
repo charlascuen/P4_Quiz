@@ -1,0 +1,24 @@
+{
+  "name": "p2_quiz",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node main.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/charlascuen/P2_Quiz.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/charlascuen/P2_Quiz/issues"
+  },
+  "homepage": "https://github.com/charlascuen/P2_Quiz#readme",
+  "dependencies": {
+    "chalk": "^2.3.2",
+    "figlet": "^1.2.0"
+  }
+}
