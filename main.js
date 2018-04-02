@@ -1,6 +1,7 @@
 const readline = require('readline'),
 Quiz = require('./quiz.js'),
 chalk = require('chalk'),
+net = require('net'),
 Store = require('./store.js')('sql');
 
 const rl = readline.createInterface({
@@ -12,20 +13,33 @@ rl.on('close', () => {
 	process.exit(0);
 });
 
+
+
+
 let commands;
 
 const prompText = chalk.magenta("quiz > ");
 let quiz;
 let store = new Store();
 store.init().then(() => {
-	quiz = new Quiz(store, rl);
-	commands = quiz.commands;
-	rl.question(prompText, processInput);
+	let server = net.createServer((socket) => {
+		let quiz = new Quiz(store, rl, socket);
+		commands = quiz.commands;
+		socket.write(prompText);
+		socket.on('data', (data) => {
+			if (!quiz.lock) {
+				console.log(data);
+				processInput(data.toString().replace(/[\n\r]+/g, ''), quiz, socket)
+			}
+		});
+	});
+	
+	server.listen(3030);
 }).catch((error) => {
 	console.log(error);
-})
+});
 
-function processInput(command) {
+function processInput(command, quiz, socket) {
 	let splitCommand = command.split(" ");
 	let commandName = splitCommand[0].toLowerCase();
 	let commandArgs;
@@ -49,13 +63,25 @@ function processInput(command) {
 	
 	if(promise) {
 		promise.then(() => {
-			rl.question(prompText, processInput);
+			socket.write(prompText);
+			socket._events.data = (data) => {
+				if (!quiz.lock) {
+					console.log(data);
+					processInput(data.toString().replace(/[\n\r]+/g, ''), quiz, socket)
+				}
+			}
 		}).catch((error) => {
 			console.log(error);
 		});
 	} else {
-		console.log(chalk.yellow.bgRed.bold("El comando " + commandName + " no se ha encontrado, pruebe con \"help\""));
-		rl.question(prompText, processInput);
+		socket.write(chalk.yellow.bgRed.bold("El comando " + commandName + " no se ha encontrado, pruebe con \"help\""));
+		socket.write(prompText);
+		socket._events.data = (data) => {
+			if (!quiz.lock) {
+				console.log(data);
+				processInput(data.toString().replace(/[\n\r]+/g, ''), quiz, socket)
+			}
+		}
 	}
 	
 }

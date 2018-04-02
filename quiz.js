@@ -4,9 +4,10 @@ log = require('./log.js');
 
 module.exports = class Quiz {
 	
-	constructor(store, rl) {
+	constructor(store, rl, socket) {
 		this.store = store;
 		this.rl = rl;
+		this.socket = socket;
 		this.commands = [
 			{
 				name: "help",
@@ -60,7 +61,7 @@ module.exports = class Quiz {
 			for (let command of this.commands) {
 				text += "\t" + command.name + (command.alias ? "|" + command.alias : "") + "\t-" + command.description + "\n";
 			}
-			console.log(text);
+			this.socket.write(text);
 			
 			resolve();
 		});
@@ -75,9 +76,9 @@ module.exports = class Quiz {
 					for (let id in quizzes) {
 						text += log.quizQuestion(id, quizzes[id].question);
 					}
-					console.log(text);
+					this.socket.write(text);
 				} else {
-					console.log(log.error("No hay preguntas almacenadas"));
+					this.socket.write(log.error("No hay preguntas almacenadas\n"));
 				}
 				
 				resolve();
@@ -88,10 +89,10 @@ module.exports = class Quiz {
 	show(id) {
 		return new Promise((resolve, reject) => {
 			this.store.get(id).then((quiz) => {
-				console.log(log.quizItem(id, quiz.question, quiz.answer));
+				this.socket.write(log.quizItem(id, quiz.question, quiz.answer));
 				resolve();
 			}).catch(() => {
-				console.log(log.error("El valor del parámetro id no es válido"));
+				this.socket.write(log.error("El valor del parámetro id no es válido\n"));
 				resolve();
 			});
 		});
@@ -99,13 +100,15 @@ module.exports = class Quiz {
 	
 	add() {
 		return new Promise((resolve, reject) => {
-			this.rl.question(chalk.red("Introduzca una pregunta: "), (question) => {
-				this.rl.question(chalk.red("Introduzca la respuesta: "), (answer) => {
-					let quiz = this.store.add(question, answer).then((quiz) => {
+			this.socket.write(chalk.red("Introduzca una pregunta: "));
+			this.socket._events.data = (question) => {
+				this.socket.write(chalk.red("Introduzca una pregunta: "));
+				this.socket._events.data = (answer) => {
+					this.store.add(question.toString().replace(/[\n\r]+/g, ''), answer.toString().replace(/[\n\r]+/g, '')).then(() => {
 						resolve();
 					});
-				});
-			});
+				}
+			}
 		});
 	}
 	
@@ -114,7 +117,7 @@ module.exports = class Quiz {
 			this.store.delete(id).then((quiz) => {
 				resolve();
 			}).catch(() => {
-				console.log(log.error("El valor del parámetro id no es válido"));
+				this.socket.write(log.error("El valor del parámetro id no es válido\n"));
 				resolve();
 			});
 		});
@@ -122,16 +125,18 @@ module.exports = class Quiz {
 	
 	edit(id) {
 		return new Promise((resolve, reject) => {
-			this.rl.question(chalk.red("Introduzca una pregunta: "), (question) => {
-				this.rl.question(chalk.red("Introduzca la respuesta: "), (answer) => {
-					this.store.update(id, question, answer).then((quiz) => {
+			this.socket.write(chalk.red("Introduzca una pregunta: "));
+			this.socket._events.data = (question) => {
+				this.socket.write(chalk.red("Introduzca una pregunta: "));
+				this.socket._events.data = (answer) => {
+					this.store.update(id, question.toString().replace(/[\n\r]+/g, ''), answer.toString().replace(/[\n\r]+/g, '')).then(() => {
 						resolve();
 					}).catch(() => {
-						console.log(log.error("El valor del parámetro id no es válido"));
+						this.socket.write(log.error("El valor del parámetro id no es válido\n"));
 						resolve();
 					});
-				});
-			});
+				}
+			}
 		});
 	}
 	
@@ -139,11 +144,11 @@ module.exports = class Quiz {
 		return new Promise((resolve, reject) => {
 			this.questionTest(id).then((answer) => {
 				if (answer) {
-					console.log("Su respuesta es correcta");
-					console.log(log.correct());
+					this.socket.write("Su respuesta es correcta\n");
+					this.socket.write(log.correct() + '\n');
 				} else {
-					console.log("Su respuesta es incorrecta");
-					console.log(log.incorrect());
+					this.socket.write("Su respuesta es incorrecta\n");
+					this.socket.write(log.incorrect() + '\n');
 				}
 				return resolve();
 			});
@@ -161,20 +166,20 @@ module.exports = class Quiz {
 						this.questionTest(quizzes[id]).then((result) => {
 							if (result) {
 								score++;
-								console.log(`CORRECTO - Lleva ${score} aciertos.`);
+								this.socket.write(`CORRECTO - Lleva ${score} aciertos.\n`);
 							} else {
-								console.log(`INCORRECTO.`);
-								console.log(`Fin del juego. Aciertos: ${score}`);
-								console.log(log.score(score));
+								this.socket.write(`INCORRECTO.\n`);
+								this.socket.write(`Fin del juego. Aciertos: ${score}\n`);
+								this.socket.write(log.score(score) + '\n');
 								return resolve();
 							}
 							quizzes.splice(id, 1);
 							ask();
 						});
 					} else {
-						console.log("No hay nada más que preguntar.");
-						console.log(`Fin del juego. Aciertos: ${score}`);
-						console.log(log.score(score));
+						this.socket.write("No hay nada más que preguntar.\n");
+						this.socket.write(`Fin del juego. Aciertos: ${score}\n`);
+						this.socket.write(log.score(score) + '\n');
 						resolve();
 					}
 				};
@@ -185,17 +190,17 @@ module.exports = class Quiz {
 	
 	credits() {
 		return new Promise((resolve, reject) => {
-			console.log("Autores de la práctica:");
-			console.log(log.credits(`Daniel Galera Nebot`));
-			console.log(log.credits(`Carlos Cuenca Enrique`));
+			this.socket.write("Autores de la práctica:\n");
+			this.socket.write(log.credits(`Daniel Galera Nebot\n`));
+			this.socket.write(log.credits(`Carlos Cuenca Enrique\n`));
 			resolve();
 		});
 	}
 	
 	quit() {
 		return new Promise((resolve, reject) => {
-			console.log("Adiós!");
-			process.exit();
+			this.socket.write("Adiós!\n");
+			this.socket.destroy();
 			resolve();
 		});
 	}
@@ -203,13 +208,14 @@ module.exports = class Quiz {
 	questionTest(id) {
 		return new Promise((resolve, reject) => {
 			this.store.get(id).then((quiz) => {
-				this.rl.question(chalk.red(quiz.question + "? "), (answer) => {
-					answer = answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
+				this.socket.write(chalk.red(quiz.question + "? "));
+				this.socket._events.data = (answer) => {
+					answer = answer.toString().replace(/[\n\r]+/g, '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
 					let realAnswer = quiz.answer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
 					resolve(answer == realAnswer);
-				});
+				}
 			}).catch(() => {
-				console.log(log.error("El valor del parámetro id no es válido"));
+				this.socket.write(log.error("El valor del parámetro id no es válido\n"));
 				resolve();
 			});
 			
